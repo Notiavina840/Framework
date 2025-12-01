@@ -3,3 +3,4 @@ com\framework\core\FrontServlet.class
 com\framework\annotation\AnnotationScanner.class
 com\framework\annotation\AppClass.class
 com\framework\annotation\MonAnnotation.class
+com\framework\core\FrontServlet.class
