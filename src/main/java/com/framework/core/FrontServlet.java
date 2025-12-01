@@ -1,6 +1,5 @@
 package com.framework.core;
 
-
 import java.io.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -17,13 +16,11 @@ import com.framework.annotation.PostMapping;
 import com.framework.annotation.URL;
 
 import jakarta.servlet.*;
-import jakarta.servlet.annotation.*;
 import jakarta.servlet.http.*;
 
-// @WebServlet("/")
 public class FrontServlet extends HttpServlet {
-    
-    RequestDispatcher defaultDispatcher;
+
+    private RequestDispatcher defaultDispatcher;
 
     @Override
     public void init() {
@@ -33,7 +30,6 @@ public class FrontServlet extends HttpServlet {
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         String path = req.getRequestURI().substring(req.getContextPath().length());
-        
         boolean resourceExists = getServletContext().getResource(path) != null;
 
         if (resourceExists) {
@@ -43,9 +39,7 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-
     private void customServe(HttpServletRequest req, HttpServletResponse res) throws IOException, ServletException {
-
         res.setContentType("text/html; charset=UTF-8");
         res.setCharacterEncoding("UTF-8");
 
@@ -56,10 +50,10 @@ public class FrontServlet extends HttpServlet {
 
         boolean found = false;
 
-        // 1 – Récupérer les classes annotées @AppClass dans le projet test
         List<Class<?>> annotatedClasses = AnnotationScanner.getAnnotatedClasses("com.test.controllers", Controller.class);
 
         for (Class<?> clazz : annotatedClasses) {
+            Method method = null;
 
             // 2 – Trouver la méthode correspondant à l'URL via ton annotation (@MonAnnotation)
             Method method = null;
@@ -80,9 +74,22 @@ public class FrontServlet extends HttpServlet {
 
             if (method != null) {
                 found = true;
-
                 try {
                     Object instance = clazz.getDeclaredConstructor().newInstance();
+                    Parameter[] params = method.getParameters();
+                    Object[] args = new Object[params.length];
+
+                    // Récupérer les variables {var} depuis l'URL
+                    String urlPattern;
+                    if (method.isAnnotationPresent(URL.class)) {
+                        urlPattern = method.getAnnotation(URL.class).url();
+                    } else if (method.isAnnotationPresent(GetMapping.class)) {
+                        urlPattern = method.getAnnotation(GetMapping.class).value();
+                    } else if (method.isAnnotationPresent(PostMapping.class)) {
+                        urlPattern = method.getAnnotation(PostMapping.class).value();
+                    } else {
+                        urlPattern = url; // fallback
+                    }
 
                     // 3 – Exécution de la méthode du contrôleur
                     // Sprint 6 : injection sécurisée des arguments depuis request
@@ -137,35 +144,27 @@ public class FrontServlet extends HttpServlet {
                     // Appel de la méthode avec les arguments sécurisés
                     Object result = method.invoke(instance, args);
 
+                        args[i] = value;
+                    }
 
+                    Object result = method.invoke(instance, args);
 
-                    // 4 – Gestion selon type retour
+                    // Gestion du retour
                     if (result instanceof String) {
                         res.getWriter().print((String) result);
                         return;
-                    }
-
-                    else if (result instanceof ModelView) {
+                    } else if (result instanceof ModelView) {
                         ModelView mv = (ModelView) result;
                         String viewName = mv.getView();
 
-                        // Injecter les données dans la requête
                         for (String key : mv.getData().keySet()) {
                             req.setAttribute(key, mv.getData().get(key));
                         }
 
-                        // Forward vers JSP
                         RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + viewName);
-                        try {                  
-                            dispatcher.forward(req, res);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                        
+                        dispatcher.forward(req, res);
                         return;
-                    }
-
-                    else {
+                    } else {
                         res.getWriter().println("⚠️ Type de retour non supporté : " + result);
                         return;
                     }
@@ -177,51 +176,39 @@ public class FrontServlet extends HttpServlet {
             }
         }
 
-        // 5 – Si aucune méthode trouvée
         if (!found) {
             res.getWriter().println("<p>Aucune methode ou classe associee à l URL : " + url + "</p>");
         }
     }
 
-
-
-
     private void defaultServe(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         defaultDispatcher.forward(req, res);
     }
 
-
-
-      private Object convert(String rawValue, Class<?> type) {
+    private Object convert(String rawValue, Class<?> type) {
         try {
             if (type == String.class) return rawValue;
             if (type == int.class || type == Integer.class) return Integer.parseInt(rawValue);
             if (type == double.class || type == Double.class) return Double.parseDouble(rawValue);
             if (type == float.class || type == Float.class) return Float.parseFloat(rawValue);
             if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(rawValue);
-        } catch (Exception e) { }
+        } catch (Exception e) {}
         return null;
     }
 
-
     private Map<String, String> extractPathVariables(String pattern, String url) {
         Map<String, String> vars = new HashMap<>();
-
-        // Transformer pattern /user/{id} → regex /user/([^/]+)
         String regex = pattern.replaceAll("\\{[^/]+\\}", "([^/]+)");
         Pattern p = Pattern.compile(regex);
         Matcher m = p.matcher(url);
 
         if (m.matches()) {
-            // Extraire les noms des variables
             Matcher mNames = Pattern.compile("\\{([^/]+)\\}").matcher(pattern);
             int i = 1;
             while (mNames.find()) {
                 vars.put(mNames.group(1), m.group(i++));
             }
         }
-
         return vars;
     }
-
 }
