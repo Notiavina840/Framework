@@ -64,7 +64,12 @@ public class FrontServlet extends HttpServlet {
                     Object instance = clazz.getDeclaredConstructor().newInstance();
 
                     // 3 – Exécution de la méthode du contrôleur
-                    Object result = method.invoke(instance);
+                    // Sprint 3-ter : on passe null pour tous les paramètres
+                    int paramCount = method.getParameterCount();
+                    Object[] args = new Object[paramCount];  // Tableau rempli de null
+                                    
+                    Object result = method.invoke(instance, args);
+
 
                     // 4 – Gestion selon type retour
                     if (result instanceof String) {
@@ -76,9 +81,19 @@ public class FrontServlet extends HttpServlet {
                         ModelView mv = (ModelView) result;
                         String viewName = mv.getView();
 
+                        // Injecter les données dans la requête
+                        for (String key : mv.getData().keySet()) {
+                            req.setAttribute(key, mv.getData().get(key));
+                        }
+
                         // Forward vers JSP
                         RequestDispatcher dispatcher = req.getRequestDispatcher("/views/" + viewName);
-                        dispatcher.forward(req, res);
+                        try {                  
+                            dispatcher.forward(req, res);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        
                         return;
                     }
 
