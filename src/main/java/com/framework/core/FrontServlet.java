@@ -5,6 +5,9 @@ import java.io.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.framework.annotation.AnnotationScanner;
 import com.framework.annotation.Controller;
@@ -175,4 +178,39 @@ Object result = method.invoke(instance, args);
     private void defaultServe(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
         defaultDispatcher.forward(req, res);
     }
+
+
+
+      private Object convert(String rawValue, Class<?> type) {
+        try {
+            if (type == String.class) return rawValue;
+            if (type == int.class || type == Integer.class) return Integer.parseInt(rawValue);
+            if (type == double.class || type == Double.class) return Double.parseDouble(rawValue);
+            if (type == float.class || type == Float.class) return Float.parseFloat(rawValue);
+            if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(rawValue);
+        } catch (Exception e) { }
+        return null;
+    }
+
+
+    private Map<String, String> extractPathVariables(String pattern, String url) {
+        Map<String, String> vars = new HashMap<>();
+
+        // Transformer pattern /user/{id} → regex /user/([^/]+)
+        String regex = pattern.replaceAll("\\{[^/]+\\}", "([^/]+)");
+        Pattern p = Pattern.compile(regex);
+        Matcher m = p.matcher(url);
+
+        if (m.matches()) {
+            // Extraire les noms des variables
+            Matcher mNames = Pattern.compile("\\{([^/]+)\\}").matcher(pattern);
+            int i = 1;
+            while (mNames.find()) {
+                vars.put(mNames.group(1), m.group(i++));
+            }
+        }
+
+        return vars;
+    }
+
 }
