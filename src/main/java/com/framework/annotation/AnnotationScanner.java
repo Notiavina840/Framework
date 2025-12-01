@@ -48,14 +48,14 @@ public class AnnotationScanner {
 
     public static boolean matchUrl(String mapping, String url) {
         if (mapping == null || url == null) return false;
-    
+
         // enlever "/" final
         if (mapping.endsWith("/")) mapping = mapping.substring(0, mapping.length() - 1);
         if (url.endsWith("/")) url = url.substring(0, url.length() - 1);
-    
+
         String[] mapParts = mapping.split("/");
         String[] urlParts = url.split("/");
-    
+
         // 📌 Cas spécial sprint3-bis :
         // "/user" doit matcher "/user/45"
         if (mapParts.length == urlParts.length - 1) {
@@ -70,22 +70,22 @@ public class AnnotationScanner {
             }
             if (samePrefix) return true;
         }
-    
+
         // Si tailles différentes → pas match
         if (mapParts.length != urlParts.length) return false;
-    
+
         // comparaison segment par segment
         for (int i = 0; i < mapParts.length; i++) {
             String m = mapParts[i];
             String u = urlParts[i];
-        
+
             if (m.startsWith("{") && m.endsWith("}")) {
                 continue; // segment dynamique → accepté
             }
-        
+
             if (!m.equals(u)) return false;
         }
-    
+
         return true;
     }
 
@@ -93,42 +93,49 @@ public class AnnotationScanner {
 
 
 
-    public static Method findMethodByUrl(Class<?> clazz, Class<? extends Annotation> annotation, String url) {
+public static Method findMethodByUrl(Class<?> clazz, Class<? extends Annotation> annotation, String url) {
+    Method bestMethod = null;
+    boolean foundDynamic = false;
 
-        Method bestMethod = null;
-        boolean foundDynamic = false;
+    for (Method method : clazz.getDeclaredMethods()) {
+        if (!method.isAnnotationPresent(annotation)) continue;
 
-        for (Method method : clazz.getDeclaredMethods()) {
-            if (!method.isAnnotationPresent(annotation)) continue;
+        try {
+            Annotation ann = method.getAnnotation(annotation);
+            String mapping = null;
 
+            // Vérifier selon annotation
             try {
-                Annotation ann = method.getAnnotation(annotation);
-                Method urlMethod = annotation.getMethod("url");
-                String mapping = (String) urlMethod.invoke(ann);
-
-                // 🔍 vérifier si l'URL reçue correspond au mapping
-                if (matchUrl(mapping, url)) {
-
-                    boolean isDynamic = mapping.contains("{");
-
-                    // 📌 priorité au mapping dynamique
-                    if (isDynamic && !foundDynamic) {
-                        bestMethod = method;
-                        foundDynamic = true;
-                    }
-                    // 📌 sinon on prend un mapping simple si aucun autre trouvé
-                    else if (!foundDynamic && bestMethod == null) {
-                        bestMethod = method;
-                    }
+                mapping = (String) annotation.getMethod("url").invoke(ann); // pour @URL
+            } catch (NoSuchMethodException e1) {
+                try {
+                    mapping = (String) annotation.getMethod("value").invoke(ann); // pour @GetMapping/@PostMapping
+                } catch (NoSuchMethodException e2) {
+                    continue; // aucun mapping → ignorer
                 }
-
-            } catch (Exception e) {
-                e.printStackTrace();
             }
-        }
 
-        return bestMethod;
+            // 🔍 vérifier si l'URL reçue correspond au mapping
+            if (matchUrl(mapping, url)) {
+                boolean isDynamic = mapping.contains("{");
+                if (isDynamic && !foundDynamic) {
+                    bestMethod = method;
+                    foundDynamic = true;
+                } else if (!foundDynamic && bestMethod == null) {
+                    bestMethod = method;
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
+
+    return bestMethod;
+}
+
+
+
 
 
 
