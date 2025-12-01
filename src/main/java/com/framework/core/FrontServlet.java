@@ -55,19 +55,45 @@ public class FrontServlet extends HttpServlet {
         for (Class<?> clazz : annotatedClasses) {
             Method method = null;
 
-            // Vérification des annotations
+            // 2 – Trouver la méthode correspondant à l'URL via ton annotation (@MonAnnotation)
+            Method method = null;
+
+            // 1️⃣ @URL (ancienne compatibilité)
             method = AnnotationScanner.findMethodByUrl(clazz, URL.class, url);
+
+            // 2️⃣ Si GET, vérifier @GetMapping
             if (method == null && "GET".equalsIgnoreCase(req.getMethod())) {
-                method = AnnotationScanner.findMethodByUrl(clazz, GetMapping.class, url);
+                method = AnnotationScanner.findMethodByUrl(clazz, com.framework.annotation.GetMapping.class, url);
             }
+
+            // 3️⃣ Si POST, vérifier @PostMapping
             if (method == null && "POST".equalsIgnoreCase(req.getMethod())) {
-                method = AnnotationScanner.findMethodByUrl(clazz, PostMapping.class, url);
+                method = AnnotationScanner.findMethodByUrl(clazz, com.framework.annotation.PostMapping.class, url);
             }
+
 
             if (method != null) {
                 found = true;
                 try {
                     Object instance = clazz.getDeclaredConstructor().newInstance();
+                    Parameter[] params = method.getParameters();
+                    Object[] args = new Object[params.length];
+
+                    // Récupérer les variables {var} depuis l'URL
+                    String urlPattern;
+                    if (method.isAnnotationPresent(URL.class)) {
+                        urlPattern = method.getAnnotation(URL.class).url();
+                    } else if (method.isAnnotationPresent(GetMapping.class)) {
+                        urlPattern = method.getAnnotation(GetMapping.class).value();
+                    } else if (method.isAnnotationPresent(PostMapping.class)) {
+                        urlPattern = method.getAnnotation(PostMapping.class).value();
+                    } else {
+                        urlPattern = url; // fallback
+                    }
+
+                    // 3 – Exécution de la méthode du contrôleur
+                    // Sprint 6 : injection sécurisée des arguments depuis request
+                    // Récupération des variables dynamiques de l'URL
                     Parameter[] params = method.getParameters();
                     Object[] args = new Object[params.length];
 
@@ -89,26 +115,20 @@ public class FrontServlet extends HttpServlet {
                         Parameter p = params[i];
                         Class<?> type = p.getType();
                         Object value = null;
-
-                        // 1️⃣ Support Map<String,String>
-                        if (Map.class.isAssignableFrom(type)) {
-                            Map<String, String> map = new HashMap<>();
-                            req.getParameterMap().forEach((k, v) -> {
-                                if (v.length > 0) map.put(k, v[0]);
-                            });
-                            value = map;
-                        }
-                        // 2️⃣ Variables dynamiques {var}
-                        else if (pathVariables.containsKey(p.getName())) {
+                    
+                        // 1️⃣ Priorité : {var} dans l'URL
+                        if (pathVariables.containsKey(p.getName())) {
                             value = convert(pathVariables.get(p.getName()), type);
                         }
-                        // 3️⃣ @RequestParam
-                        else if (p.isAnnotationPresent(com.framework.annotation.RequestParam.class)) {
+                    
+                        // 2️⃣ Priorité : @RequestParam
+                        if (value == null && p.isAnnotationPresent(com.framework.annotation.RequestParam.class)) {
                             String key = p.getAnnotation(com.framework.annotation.RequestParam.class).value();
                             String raw = req.getParameter(key);
                             if (raw != null) value = convert(raw, type);
                         }
-                        // 4️⃣ Valeur par défaut
+                    
+                        // 3️⃣ Valeur par défaut
                         if (value == null) {
                             if (type == int.class) value = 0;
                             else if (type == double.class) value = 0.0;
@@ -116,6 +136,13 @@ public class FrontServlet extends HttpServlet {
                             else if (type == boolean.class) value = false;
                             else value = null;
                         }
+                    
+                        args[i] = value;
+                    }
+
+
+                    // Appel de la méthode avec les arguments sécurisés
+                    Object result = method.invoke(instance, args);
 
                         args[i] = value;
                     }
